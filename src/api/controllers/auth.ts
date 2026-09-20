@@ -11,10 +11,17 @@ import {
   SuccessResponse,
   Tags,
 } from "tsoa";
-import type { Request as ExRequest } from "express";
+import type { Request as ExRequest, Response as ExResponse } from "express";
 
 import type { User } from "../../db/schema.js";
+import { verifyRequestOrigin } from "../../middlewares/csrf.js";
 import { validate } from "../../middlewares/validate.js";
+import config from "../../config/config.js";
+import {
+  clearRefreshTokenCookie,
+  setRefreshTokenCookie,
+} from "../../utils/index.js";
+import { ApiError } from "../../utils/index.js";
 import { authValidation } from "../../validations/index.js";
 import type { AuthTokensResponse } from "../repositories/token/types.js";
 import type { SafeUser } from "../repositories/user/types.js";
@@ -45,7 +52,11 @@ export interface GoogleLoginBody {
 }
 
 export interface RefreshTokenBody {
-  refreshToken: string;
+  /**
+   * Optional. Daca lipseste, se foloseste cookie-ul httpOnly `refreshToken`.
+   * Clientii browser il lasa gol; cei non-browser il pot trimite aici.
+   */
+  refreshToken?: string;
 }
 
 export interface ForgotPasswordBody {
@@ -72,54 +83,75 @@ export class AuthController extends Controller {
   @Post("register")
   @SuccessResponse(StatusCodes.CREATED, "Created")
   @Middlewares(validate(authValidation.register))
-  public async register(@Body() body: RegisterBody): Promise<AuthResponse> {
+  public async register(
+    @Request() req: ExRequest,
+    @Body() body: RegisterBody,
+  ): Promise<AuthResponse> {
     const user = await this.userService.createUser({
       email: body.email,
       password: body.password,
     });
     const tokens = await this.tokenService.generateAuthTokens(user);
 
+    this.issueRefreshCookie(req, tokens);
     this.setStatus(StatusCodes.CREATED);
     return { user, tokens };
   }
 
   @Post("login")
   @Middlewares(validate(authValidation.login))
-  public async login(@Body() body: LoginBody): Promise<AuthResponse> {
+  public async login(
+    @Request() req: ExRequest,
+    @Body() body: LoginBody,
+  ): Promise<AuthResponse> {
     const user = await this.authService.loginUserWithEmailAndPassword(
       body.email,
       body.password,
     );
     const tokens = await this.tokenService.generateAuthTokens(user);
 
+    this.issueRefreshCookie(req, tokens);
     return { user, tokens };
   }
 
   @Post("google")
   @Middlewares(validate(authValidation.google))
   public async googleLogin(
+    @Request() req: ExRequest,
     @Body() body: GoogleLoginBody,
   ): Promise<AuthResponse> {
     const user = await this.authService.loginWithGoogle(body.idToken);
     const tokens = await this.tokenService.generateAuthTokens(user);
 
+    this.issueRefreshCookie(req, tokens);
     return { user, tokens };
   }
 
   @Post("logout")
   @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
-  @Middlewares(validate(authValidation.logout))
-  public async logout(@Body() body: RefreshTokenBody): Promise<void> {
-    await this.authService.logout(body.refreshToken);
+  @Middlewares(verifyRequestOrigin, validate(authValidation.logout))
+  public async logout(
+    @Request() req: ExRequest,
+    @Body() body: RefreshTokenBody,
+  ): Promise<void> {
+    await this.authService.logout(this.readRefreshToken(req, body));
+
+    clearRefreshTokenCookie(req.res as ExResponse);
     this.setStatus(StatusCodes.NO_CONTENT);
   }
 
   @Post("refresh-tokens")
-  @Middlewares(validate(authValidation.refreshTokens))
+  @Middlewares(verifyRequestOrigin, validate(authValidation.refreshTokens))
   public async refreshTokens(
+    @Request() req: ExRequest,
     @Body() body: RefreshTokenBody,
   ): Promise<AuthTokensResponse> {
-    return this.authService.refreshAuth(body.refreshToken);
+    const tokens = await this.authService.refreshAuth(
+      this.readRefreshToken(req, body),
+    );
+
+    this.issueRefreshCookie(req, tokens);
+    return tokens;
   }
 
   @Post("forgot-password")
@@ -170,5 +202,32 @@ export class AuthController extends Controller {
   public async verifyEmail(@Request() req: ExRequest): Promise<void> {
     await this.authService.verifyEmail(req.query.token as string);
     this.setStatus(StatusCodes.NO_CONTENT);
+  }
+
+  /**
+   * Refresh token-ul pleaca in cookie httpOnly. Ramane si in body pentru
+   * clientii non-browser (mobil, Swagger), care nu au unde sa tina cookies.
+   */
+  private issueRefreshCookie(req: ExRequest, tokens: AuthTokensResponse): void {
+    if (!tokens.refresh) return;
+
+    setRefreshTokenCookie(
+      req.res as ExResponse,
+      tokens.refresh.token,
+      tokens.refresh.expires,
+    );
+  }
+
+  /** Cookie-ul are prioritate; body-ul e fallback pentru clienti non-browser. */
+  private readRefreshToken(req: ExRequest, body: RefreshTokenBody): string {
+    const token =
+      (req.cookies?.[config.cookie.refreshName] as string | undefined) ??
+      body.refreshToken;
+
+    if (!token) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, "Missing refresh token");
+    }
+
+    return token;
   }
 }

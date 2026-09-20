@@ -11,6 +11,10 @@ const numberFromEnv = (defaultValue?: number) =>
     return Number.isFinite(n) ? n : val;
   }, z.number());
 
+/** Variabilele lasate goale in .env trebuie tratate ca nesetate. */
+const emptyAsUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === "" ? undefined : v), schema);
+
 const EnvSchema = z
   .object({
     NODE_ENV: z.enum(["production", "development", "test"]),
@@ -27,8 +31,27 @@ const EnvSchema = z
     JWT_RESET_PASSWORD_EXPIRATION_MINUTES: numberFromEnv(10),
     JWT_VERIFY_EMAIL_EXPIRATION_MINUTES: numberFromEnv(10),
 
+    // Cookies (refresh token) + CORS
+    // Lista de origini permise, separate prin virgula. Obligatorie cand
+    // COOKIE_SAME_SITE=none, fiindca `credentials` nu merge cu origin "*".
+    CORS_ORIGINS: emptyAsUndefined(z.string().optional()),
+    // "lax" pentru same-site (shop.ro + api.shop.ro), "none" pentru
+    // domenii complet diferite. "none" impune si COOKIE_SECURE=true.
+    COOKIE_SAME_SITE: emptyAsUndefined(
+      z.enum(["lax", "strict", "none"]).default("lax"),
+    ),
+    COOKIE_SECURE: emptyAsUndefined(
+      z
+        .enum(["true", "false"])
+        .optional()
+        // undefined trebuie pastrat, ca mai jos sa cada pe NODE_ENV
+        .transform((v) => (v === undefined ? undefined : v === "true")),
+    ),
+    // ex: ".shop.ro" ca sa fie trimis si catre api.shop.ro
+    COOKIE_DOMAIN: emptyAsUndefined(z.string().optional()),
+
     // Google OAuth (ID token verification)
-    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_ID: emptyAsUndefined(z.string().optional()),
 
     // email driver + from
     EMAIL_DRIVER: z.enum(["disabled", "smtp", "postmark"]).default("disabled"),
@@ -58,6 +81,18 @@ if (!parsed.success) {
 const envVars = parsed.data;
 
 // Validări logice (nu doar tipuri)
+if (envVars.COOKIE_SAME_SITE === "none" && envVars.COOKIE_SECURE === false) {
+  throw new Error(
+    "COOKIE_SAME_SITE=none requires COOKIE_SECURE=true (browsers reject it otherwise)",
+  );
+}
+
+if (envVars.NODE_ENV === "production" && !envVars.CORS_ORIGINS) {
+  throw new Error(
+    "CORS_ORIGINS is required in production (credentials cannot be used with origin \"*\")",
+  );
+}
+
 if (envVars.EMAIL_DRIVER !== "disabled" && !envVars.EMAIL_FROM) {
   throw new Error("EMAIL_FROM is required when EMAIL_DRIVER is enabled");
 }
@@ -92,6 +127,22 @@ export default {
     resetPasswordExpirationMinutes:
       envVars.JWT_RESET_PASSWORD_EXPIRATION_MINUTES,
     verifyEmailExpirationMinutes: envVars.JWT_VERIFY_EMAIL_EXPIRATION_MINUTES,
+  },
+
+  cors: {
+    origins: envVars.CORS_ORIGINS
+      ? envVars.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+      : [],
+  },
+
+  cookie: {
+    /** Numele cookie-ului care poarta refresh token-ul. */
+    refreshName: "refreshToken",
+    sameSite: envVars.COOKIE_SAME_SITE,
+    secure: envVars.COOKIE_SECURE ?? envVars.NODE_ENV === "production",
+    domain: envVars.COOKIE_DOMAIN,
+    /** Limiteaza trimiterea cookie-ului la rutele de auth. */
+    path: "/v1/auth",
   },
 
   google: {

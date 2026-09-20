@@ -22,15 +22,17 @@ export const authValidation = {
     }),
   },
 
+  // `refreshToken` e optional: sursa principala e cookie-ul httpOnly, iar
+  // body-ul ramane fallback pentru clientii non-browser.
   logout: {
     body: z.object({
-      refreshToken: z.string().min(1),
+      refreshToken: z.string().min(1).optional(),
     }),
   },
 
   refreshTokens: {
     body: z.object({
-      refreshToken: z.string().min(1),
+      refreshToken: z.string().min(1).optional(),
     }),
   },
 

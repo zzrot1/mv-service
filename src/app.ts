@@ -2,6 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import compression from "compression";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import passport from "passport";
 import { StatusCodes } from "http-status-codes";
 
@@ -40,9 +41,17 @@ app.use((req, res, next) => {
 
 app.use(compression());
 
-// enable cors
-app.use(cors());
-app.options("/*path", cors());
+// parse cookies (refresh token-ul vine in cookie httpOnly)
+app.use(cookieParser());
+
+// CORS. `credentials` e obligatoriu ca browserul sa trimita cookie-ul, iar
+// el nu functioneaza cu origin "*", deci in productie cerem lista explicita.
+const corsOptions: cors.CorsOptions = config.cors.origins.length
+  ? { origin: config.cors.origins, credentials: true }
+  : { origin: true, credentials: true };
+
+app.use(cors(corsOptions));
+app.options("/*path", cors(corsOptions));
 
 // jwt authentication
 app.use(passport.initialize());
