@@ -1,4 +1,4 @@
-import { EmailMessage, EmailProvider } from "../../utils/index.js";
+import type { EmailMessage, EmailProvider } from "../../utils/index.js";
 
 type HttpConfig = {
   endpoint: string;

@@ -4,11 +4,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../config/dependencyTokens.js";
 import { TokenType, type Token } from "../../db/schema.js";
-import {
-  AuthTokensResponse,
-  ITokenRepository,
-  IUserRepository,
-} from "../repositories/index.js";
+import type { AuthTokensResponse, ITokenRepository, IUserRepository } from "../repositories/index.js";
 import { ApiError } from "../../utils/index.js";
 import { StatusCodes } from "http-status-codes";
 

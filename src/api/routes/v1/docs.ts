@@ -10,9 +10,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const swaggerPath = path.resolve(__dirname, "../../swagger.json");
-const swaggerDoc = JSON.parse(fs.readFileSync(swaggerPath, "utf-8"));
 
-router.get("/openapi.json", (_req, res) => res.json(swaggerDoc));
+const swaggerDoc = fs.existsSync(swaggerPath)
+  ? JSON.parse(fs.readFileSync(swaggerPath, "utf-8"))
+  : null;
+
+router.get("/openapi.json", (_req, res) => {
+  if (!swaggerDoc) {
+    res.status(503).json({ message: "OpenAPI spec has not been generated" });
+    return;
+  }
+  res.json(swaggerDoc);
+});
 
 router.use(
   "/",

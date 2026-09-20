@@ -27,6 +27,9 @@ const EnvSchema = z
     JWT_RESET_PASSWORD_EXPIRATION_MINUTES: numberFromEnv(10),
     JWT_VERIFY_EMAIL_EXPIRATION_MINUTES: numberFromEnv(10),
 
+    // Google OAuth (ID token verification)
+    GOOGLE_CLIENT_ID: z.string().optional(),
+
     // email driver + from
     EMAIL_DRIVER: z.enum(["disabled", "smtp", "postmark"]).default("disabled"),
     EMAIL_FROM: z.string().optional(),
@@ -89,6 +92,11 @@ export default {
     resetPasswordExpirationMinutes:
       envVars.JWT_RESET_PASSWORD_EXPIRATION_MINUTES,
     verifyEmailExpirationMinutes: envVars.JWT_VERIFY_EMAIL_EXPIRATION_MINUTES,
+  },
+
+  google: {
+    enabled: Boolean(envVars.GOOGLE_CLIENT_ID),
+    clientId: envVars.GOOGLE_CLIENT_ID,
   },
 
   email: {

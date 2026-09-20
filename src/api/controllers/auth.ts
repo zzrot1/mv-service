@@ -1,98 +1,174 @@
-import type { Request, Response } from "express";
-import type { User } from "../../db/schema.js";
 import { StatusCodes } from "http-status-codes";
 import { injectable } from "tsyringe";
+import {
+  Body,
+  Controller,
+  Middlewares,
+  Post,
+  Request,
+  Route,
+  Security,
+  SuccessResponse,
+  Tags,
+} from "tsoa";
+import type { Request as ExRequest } from "express";
 
-import { catchAsync, exclude } from "../../utils/index.js";
-import { AuthService, EmailService, TokenService, UserService } from "../services/index.js";
+import type { User } from "../../db/schema.js";
+import { validate } from "../../middlewares/validate.js";
+import { authValidation } from "../../validations/index.js";
+import type { AuthTokensResponse } from "../repositories/token/types.js";
+import type { SafeUser } from "../repositories/user/types.js";
+import {
+  AuthService,
+  EmailService,
+  TokenService,
+  UserService,
+} from "../services/index.js";
 
+export interface AuthResponse {
+  user: SafeUser;
+  tokens: AuthTokensResponse;
+}
+
+export interface RegisterBody {
+  email: string;
+  password: string;
+}
+
+export interface LoginBody {
+  email: string;
+  password: string;
+}
+
+export interface GoogleLoginBody {
+  idToken: string;
+}
+
+export interface RefreshTokenBody {
+  refreshToken: string;
+}
+
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface ResetPasswordBody {
+  password: string;
+}
 
 @injectable()
-export class AuthController {
+@Route("auth")
+@Tags("Auth")
+export class AuthController extends Controller {
   constructor(
     private readonly userService: UserService,
     private readonly tokenService: TokenService,
     private readonly authService: AuthService,
     private readonly emailService: EmailService,
-  ) {}
+  ) {
+    super();
+  }
 
-  public register = catchAsync(async (req: Request, res: Response) => {
-    const { email, password } = req.body as { email: string; password: string };
-
-    const user = await this.userService.createUser({email, password});
-
-    const userWithoutPassword = exclude(user, [
-      "createdAt",
-      "updatedAt",
-    ]);
+  @Post("register")
+  @SuccessResponse(StatusCodes.CREATED, "Created")
+  @Middlewares(validate(authValidation.register))
+  public async register(@Body() body: RegisterBody): Promise<AuthResponse> {
+    const user = await this.userService.createUser({
+      email: body.email,
+      password: body.password,
+    });
     const tokens = await this.tokenService.generateAuthTokens(user);
 
-    res.status(StatusCodes.CREATED).send({ user: userWithoutPassword, tokens });
-  });
+    this.setStatus(StatusCodes.CREATED);
+    return { user, tokens };
+  }
 
-  public login = catchAsync(async (req: Request, res: Response) => {
-    const { email, password } = req.body as { email: string; password: string };
-
+  @Post("login")
+  @Middlewares(validate(authValidation.login))
+  public async login(@Body() body: LoginBody): Promise<AuthResponse> {
     const user = await this.authService.loginUserWithEmailAndPassword(
-      email,
-      password,
+      body.email,
+      body.password,
     );
     const tokens = await this.tokenService.generateAuthTokens(user);
 
-    res.send({ user, tokens });
-  });
+    return { user, tokens };
+  }
 
-  public logout = catchAsync(async (req: Request, res: Response) => {
-    const { refreshToken } = req.body as { refreshToken: string };
+  @Post("google")
+  @Middlewares(validate(authValidation.google))
+  public async googleLogin(
+    @Body() body: GoogleLoginBody,
+  ): Promise<AuthResponse> {
+    const user = await this.authService.loginWithGoogle(body.idToken);
+    const tokens = await this.tokenService.generateAuthTokens(user);
 
-    await this.authService.logout(refreshToken);
-    res.status(StatusCodes.NO_CONTENT).send();
-  });
+    return { user, tokens };
+  }
 
-  public refreshTokens = catchAsync(async (req: Request, res: Response) => {
-    const { refreshToken } = req.body as { refreshToken: string };
+  @Post("logout")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Middlewares(validate(authValidation.logout))
+  public async logout(@Body() body: RefreshTokenBody): Promise<void> {
+    await this.authService.logout(body.refreshToken);
+    this.setStatus(StatusCodes.NO_CONTENT);
+  }
 
-    const tokens = await this.authService.refreshAuth(refreshToken);
-    res.send(tokens);
-  });
+  @Post("refresh-tokens")
+  @Middlewares(validate(authValidation.refreshTokens))
+  public async refreshTokens(
+    @Body() body: RefreshTokenBody,
+  ): Promise<AuthTokensResponse> {
+    return this.authService.refreshAuth(body.refreshToken);
+  }
 
-  public forgotPassword = catchAsync(async (req: Request, res: Response) => {
-    const { email } = req.body as { email: string };
+  @Post("forgot-password")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Middlewares(validate(authValidation.forgotPassword))
+  public async forgotPassword(
+    @Body() body: ForgotPasswordBody,
+  ): Promise<void> {
+    const token = await this.tokenService.generateResetPasswordToken(
+      body.email,
+    );
+    await this.emailService.sendResetPasswordEmail(body.email, token);
 
-    const resetPasswordToken =
-      await this.tokenService.generateResetPasswordToken(email);
-    await this.emailService.sendResetPasswordEmail(email, resetPasswordToken);
+    this.setStatus(StatusCodes.NO_CONTENT);
+  }
 
-    res.status(StatusCodes.NO_CONTENT).send();
-  });
+  @Post("reset-password")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Middlewares(validate(authValidation.resetPassword))
+  public async resetPassword(
+    @Request() req: ExRequest,
+    @Body() body: ResetPasswordBody,
+  ): Promise<void> {
+    await this.authService.resetPassword(
+      req.query.token as string,
+      body.password,
+    );
+    this.setStatus(StatusCodes.NO_CONTENT);
+  }
 
-  public resetPassword = catchAsync(async (req: Request, res: Response) => {
-    const { password } = req.body as { password: string };
-    const token = req.query.token as string;
+  @Post("send-verification-email")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Security("bearerAuth")
+  public async sendVerificationEmail(
+    @Request() req: ExRequest,
+  ): Promise<void> {
+    const user = req.user as User;
 
-    await this.authService.resetPassword(token, password);
-    res.status(StatusCodes.NO_CONTENT).send();
-  });
+    const token = await this.tokenService.generateVerifyEmailToken(user);
+    await this.emailService.sendVerificationEmail(user.email, token);
 
-  public sendVerificationEmail = catchAsync(
-    async (req: Request, res: Response) => {
-      const user = req.user as User;
+    this.setStatus(StatusCodes.NO_CONTENT);
+  }
 
-      const verifyEmailToken =
-        await this.tokenService.generateVerifyEmailToken(user);
-      await this.emailService.sendVerificationEmail(
-        user.email,
-        verifyEmailToken,
-      );
-
-      res.status(StatusCodes.NO_CONTENT).send();
-    },
-  );
-
-  public verifyEmail = catchAsync(async (req: Request, res: Response) => {
-    const token = req.query.token as string;
-
-    await this.authService.verifyEmail(token);
-    res.status(StatusCodes.NO_CONTENT).send();
-  });
+  @Post("verify-email")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Middlewares(validate(authValidation.verifyEmail))
+  public async verifyEmail(@Request() req: ExRequest): Promise<void> {
+    await this.authService.verifyEmail(req.query.token as string);
+    this.setStatus(StatusCodes.NO_CONTENT);
+  }
 }

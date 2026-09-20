@@ -5,6 +5,8 @@ export const DI_TOKENS = {
   EmailServiceConfig: "EmailServiceConfig",
   UserRepository: "UserRepository",
   TokenRepository: "TokenRepository",
+  AccountRepository: "AccountRepository",
+  GoogleOAuthProvider: "GoogleOAuthProvider",
 } as const;
 
 export type EmailServiceConfig = {

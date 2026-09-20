@@ -1,12 +1,13 @@
 import { StatusCodes } from "http-status-codes";
 import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../config/dependencyTokens.js";
-import { TokenType, type User } from "../../db/schema.js";
+import { AuthProvider, TokenType, type User } from "../../db/schema.js";
 
 import { ApiError } from "../../utils/index.js";
+import type { OAuthProfile, OAuthProvider } from "../../utils/index.js";
 import { isPasswordMatch } from "../../utils/encryption.js";
 
-import type { AuthTokensResponse, ITokenRepository, IUserRepository, SafeUser } from "../repositories/index.js";
+import type { AuthTokensResponse, IAccountRepository, ITokenRepository, IUserRepository, SafeUser } from "../repositories/index.js";
 import { TokenService, UserService } from "./index.js";
 
 
@@ -18,7 +19,11 @@ export class AuthService {
     private readonly userService: UserService, 
     private readonly tokenService: TokenService, 
     @inject(DI_TOKENS.TokenRepository)
-    private readonly tokenRepo: ITokenRepository 
+    private readonly tokenRepo: ITokenRepository,
+    @inject(DI_TOKENS.AccountRepository)
+    private readonly accountRepo: IAccountRepository,
+    @inject(DI_TOKENS.GoogleOAuthProvider)
+    private readonly googleProvider: OAuthProvider,
   ) {}
 
   /**
@@ -31,7 +36,9 @@ export class AuthService {
   ): Promise<SafeUser> {
     const user = (await this.usersRepo.findByEmail(email)) as unknown as User | null;
 
-    if (!user || !(await isPasswordMatch(password, user.password))) {
+    // user.password is null for accounts created through an OAuth provider:
+    // they can only sign in through that provider until they set a password.
+    if (!user?.password || !(await isPasswordMatch(password, user.password))) {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Incorrect email or password");
     }
 
@@ -40,6 +47,86 @@ export class AuthService {
     // Dacă SafeUser mai exclude câmpuri, ajustezi aici.
     const { password: _pw, ...safe } = user;
     return safe as SafeUser;
+  }
+
+  /**
+   * Login cu Google: clientul trimite ID token-ul primit de la Google Sign-In.
+   */
+  public async loginWithGoogle(idToken: string): Promise<SafeUser> {
+    const profile = await this.googleProvider.verify(idToken);
+    return this.loginWithProvider(AuthProvider.GOOGLE, profile);
+  }
+
+  /**
+   * Find-or-create pentru o identitate venită de la un provider OAuth.
+   *
+   * 1. dacă identitatea e deja legată -> login direct
+   * 2. dacă emailul există deja -> leg contul, dar doar dacă providerul
+   *    a confirmat emailul (altfel oricine ar putea revendica adresa)
+   * 3. altfel -> user nou, fără parolă
+   */
+  private async loginWithProvider(
+    provider: AuthProvider,
+    profile: OAuthProfile,
+  ): Promise<SafeUser> {
+    const linked = await this.accountRepo.findByProviderAccount(
+      provider,
+      profile.providerAccountId,
+    );
+
+    if (linked) {
+      const user = await this.usersRepo.findById(linked.userId);
+      if (!user) {
+        throw new ApiError(StatusCodes.UNAUTHORIZED, "Please authenticate");
+      }
+      return this.toSafeUser(user);
+    }
+
+    if (!profile.emailVerified) {
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        `${provider} account has an unverified email address`,
+      );
+    }
+
+    const email = profile.email.toLowerCase();
+    const existing = await this.usersRepo.findByEmail(email);
+
+    if (existing) {
+      await this.accountRepo.create({
+        userId: existing.id,
+        provider,
+        providerAccountId: profile.providerAccountId,
+      });
+
+      if (!existing.isEmailVerified) {
+        const updated = await this.usersRepo.updateById(existing.id, {
+          isEmailVerified: true,
+        });
+        return this.toSafeUser(updated);
+      }
+
+      return this.toSafeUser(existing);
+    }
+
+    const created = await this.usersRepo.create({
+      email,
+      name: profile.name ?? null,
+      isEmailVerified: true,
+    });
+
+    await this.accountRepo.create({
+      userId: created.id,
+      provider,
+      providerAccountId: profile.providerAccountId,
+    });
+
+    return this.toSafeUser(created);
+  }
+
+  private toSafeUser(user: User): SafeUser {
+    const { password: _pw, ...safe } = user;
+    return safe;
   }
 
   /**

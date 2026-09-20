@@ -16,6 +16,12 @@ export const authValidation = {
     }),
   },
 
+  google: {
+    body: z.object({
+      idToken: z.string().min(1),
+    }),
+  },
+
   logout: {
     body: z.object({
       refreshToken: z.string().min(1),

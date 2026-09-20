@@ -4,13 +4,7 @@ import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../../config/dependencyTokens.js";
 import * as schema from "../../../db/schema.js";
 import { users, type User } from "../../../db/schema.js";
-import {
-  CreateUserInput,
-  IUserRepository,
-  QueryUsersOptions,
-  SafeUser,
-  UpdateUserInput,
-} from "./types.js";
+import type { CreateUserInput, IUserRepository, QueryUsersOptions, SafeUser, UpdateUserInput } from "./types.js";
 
 const safeUserColumns = {
   id: users.id,
@@ -18,6 +12,13 @@ const safeUserColumns = {
   name: users.name,
   role: users.role,
   isEmailVerified: users.isEmailVerified,
+  phone: users.phone,
+  addressLine1: users.addressLine1,
+  addressLine2: users.addressLine2,
+  city: users.city,
+  county: users.county,
+  postalCode: users.postalCode,
+  country: users.country,
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 } as const;
@@ -55,9 +56,16 @@ export class DrizzleUserRepository implements IUserRepository {
       .values({
         email: data.email,
         name: data.name ?? null,
-        password: data.passwordHash,
+        password: data.passwordHash ?? null,
         role: data.role ?? schema.Role.USER,
         isEmailVerified: data.isEmailVerified ?? false,
+        phone: data.phone ?? null,
+        addressLine1: data.addressLine1 ?? null,
+        addressLine2: data.addressLine2 ?? null,
+        city: data.city ?? null,
+        county: data.county ?? null,
+        postalCode: data.postalCode ?? null,
+        country: data.country ?? null,
         updatedAt: new Date(),
       })
       .returning();

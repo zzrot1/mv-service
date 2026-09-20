@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { roleValues } from "../db/schema.js";
 import { passwordSchema } from "../utils/utils.js";
+import { atLeastOneField, profileFieldsShape } from "./profile.js";
 
 const emailSchema = z.email();
 
@@ -11,6 +12,7 @@ const userIdParam = z.object({
 export const userValidation = {
   createUser: {
     body: z.object({
+      ...profileFieldsShape,
       email: emailSchema,
       password: passwordSchema,
       name: z.string().min(1, "Name is required"),
@@ -34,16 +36,15 @@ export const userValidation = {
 
   updateUser: {
     params: userIdParam,
+    // adminul poate edita si campurile de profil, plus email/parola/rol
     body: z
       .object({
+        ...profileFieldsShape,
         email: emailSchema.optional(),
         password: passwordSchema.optional(),
-        name: z.string().min(1).optional(),
         role: z.enum(roleValues).optional(),
       })
-      .refine((obj) => Object.keys(obj).length > 0, {
-        message: "At least one field must be provided",
-      }),
+      .refine((obj) => Object.keys(obj).length > 0, atLeastOneField),
   },
 
   deleteUser: {

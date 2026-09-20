@@ -47,3 +47,6 @@ Ignore any local overrides
 
 local.env
 
+# Artefacte generate de tsoa (`npm run tsoa:all`)
+src/api/generated/
+src/api/swagger.json

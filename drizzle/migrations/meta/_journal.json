@@ -8,6 +8,20 @@
       "when": 1782843120977,
       "tag": "0000_condemned_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789920229921,
+      "tag": "0001_loose_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789923581528,
+      "tag": "0002_third_ender_wiggin",
+      "breakpoints": true
     }
   ]
 }

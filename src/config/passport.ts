@@ -1,7 +1,7 @@
 import {
   Strategy as JwtStrategy,
   ExtractJwt,
-  VerifyCallback,
+  type VerifyCallback,
 } from "passport-jwt";
 import config from "./config.js";
 import { z } from "zod";

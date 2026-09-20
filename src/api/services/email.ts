@@ -3,7 +3,7 @@ import {
   DI_TOKENS,
   type EmailServiceConfig,
 } from "../../config/dependencyTokens.js";
-import { EmailProvider } from "../../utils/index.js";
+import type { EmailProvider } from "../../utils/index.js";
 
 @injectable()
 export class EmailService {

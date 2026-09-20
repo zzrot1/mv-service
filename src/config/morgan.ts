@@ -1,4 +1,4 @@
-import { Response } from "express";
+import type { Response } from "express";
 import morgan from "morgan";
 import config from "./config.js";
 import logger from "./logger.js";

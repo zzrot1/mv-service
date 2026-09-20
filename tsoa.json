@@ -1,7 +1,7 @@
 {
-  "entryFile": "src/server.ts",
+  "entryFile": "src/app.ts",
   "noImplicitAdditionalProperties": "silently-remove-extras",
-  "controllerPathGlobs": ["src/controllers/**/*.ts"],
+  "controllerPathGlobs": ["src/api/controllers/**/*.ts"],
   "spec": {
     "specVersion": 3,
     "securityDefinitions": {
@@ -11,12 +11,14 @@
         "bearerFormat": "JWT"
       }
     },
-    "outputDirectory": "dist",
+    "outputDirectory": "src/api",
     "basePath": "/v1"
   },
   "routes": {
-    "routesDir": "dist",
+    "routesDir": "src/api/generated",
     "middleware": "express",
-    "esm": true
+    "esm": true,
+    "iocModule": "src/config/ioc.ts",
+    "authenticationModule": "src/config/tsoaAuthentication.ts"
   }
 }

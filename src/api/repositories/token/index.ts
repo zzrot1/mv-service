@@ -4,7 +4,7 @@ import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../../config/dependencyTokens.js";
 import * as schema from "../../../db/schema.js";
 import { tokens, type Token, type TokenType } from "../../../db/schema.js";
-import { ITokenRepository } from "./types.js";
+import type { ITokenRepository } from "./types.js";
 
 @injectable()
 export class DrizzleTokenRepository implements ITokenRepository {
@@ -77,6 +77,15 @@ export class DrizzleTokenRepository implements ITokenRepository {
       .returning({ id: tokens.id });
 
     return updated.length;
+  }
+
+  async deleteByUserId(userId: number): Promise<number> {
+    const deleted = await this.db
+      .delete(tokens)
+      .where(eq(tokens.userId, userId))
+      .returning({ id: tokens.id });
+
+    return deleted.length;
   }
 
   async deleteExpired(now: Date = new Date()): Promise<number> {

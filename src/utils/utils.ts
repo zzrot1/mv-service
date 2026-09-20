@@ -12,6 +12,17 @@ export interface EmailProvider {
   send(message: EmailMessage): Promise<void>;
 }
 
+export type OAuthProfile = {
+  providerAccountId: string;
+  email: string;
+  emailVerified: boolean;
+  name?: string | null;
+};
+
+export interface OAuthProvider {
+  verify(credential: string): Promise<OAuthProfile>;
+}
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters")

@@ -1,27 +1,40 @@
 import type { Role, User } from "../../../db/schema.js";
-import { SortOrder } from "../../../utils/index.js";
+import type { SortOrder } from "../../../utils/index.js";
 
 export type SafeUser = Omit<User, "password">;
 
-export type CreateUserInput = {
+/** Campuri de profil pe care userul si le poate edita singur. */
+export type ProfileFields = {
+  name?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  county?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+};
+
+export type CreateUserInput = ProfileFields & {
   email: string;
-  name?: string | null;
-  passwordHash: string;
+  /** Absent for users created through an OAuth provider. */
+  passwordHash?: string | null;
   role?: Role;
   isEmailVerified?: boolean;
 };
 
-export type UpdateUserInput = {
+export type UpdateUserInput = ProfileFields & {
   email?: string;
-  name?: string | null;
   role?: Role;
   isEmailVerified?: boolean;
 };
 
-export type CreateUserRequest = {
+/** Ce accepta PATCH /v1/profile — fara email, rol sau flag de verificare. */
+export type UpdateProfileInput = ProfileFields;
+
+export type CreateUserRequest = ProfileFields & {
   email: string;
   password: string;
-  name?: string;
   role?: Role;
 };
 

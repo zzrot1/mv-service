@@ -29,6 +29,19 @@ function formatZodIssues(issues: z.ZodIssue[], fallbackPrefix: string) {
   });
 }
 
+function assignRequestPart(req: Request, key: RequestPart, value: unknown) {
+  try {
+    (req as any)[key] = value;
+  } catch {
+    Object.defineProperty(req, key, {
+      value,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  }
+}
+
 export const validate =
   <S extends ValidateSchema>(schema: S): RequestHandler =>
   (req: Request, _res: Response, next: NextFunction) => {
@@ -54,9 +67,11 @@ export const validate =
       );
     }
 
-    if (parsed.params) (req as any).params = parsed.params;
-    if (parsed.query) (req as any).query = parsed.query;
-    if (parsed.body) (req as any).body = parsed.body;
+    // In Express 5 `req.query` e definit ca getter pe prototip, deci o
+    // atribuire simpla arunca. Redefinim proprietatea pe instanta.
+    if (parsed.params) assignRequestPart(req, "params", parsed.params);
+    if (parsed.query) assignRequestPart(req, "query", parsed.query);
+    if (parsed.body) assignRequestPart(req, "body", parsed.body);
 
     return next();
   };

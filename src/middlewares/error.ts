@@ -1,4 +1,4 @@
-import { ErrorRequestHandler } from "express";
+import type { ErrorRequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
 import config from "../config/config.js";
 import logger from "../config/logger.js";

@@ -18,6 +18,8 @@ export interface ITokenRepository {
   blacklistById(id: number): Promise<void>;
   blacklistManyByUserAndType(userId: number, type: TokenType): Promise<number>;
 
+  deleteByUserId(userId: number): Promise<number>;
+
   deleteExpired(now?: Date): Promise<number>;
 }
 

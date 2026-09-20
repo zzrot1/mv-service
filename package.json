@@ -14,9 +14,9 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
-    "build": " tsc -p tsconfig.json",
-    "build:tsoa": "npm run tsoa:all && tsc -p tsconfig.json",
+    "dev": "npm run tsoa:all && node --watch --import @swc-node/register/esm-register src/server.ts",
+    "build": "npm run tsoa:all && tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('src/api/swagger.json','dist/api/swagger.json')\"",
+    "build:tsoa": "npm run build",
     "clean": "rimraf coverage dist tmp",
     "lint": "eslint .",
     "tsoa:spec": "tsoa spec",
@@ -37,6 +37,7 @@
     "drizzle-orm": "^0.45.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
+    "google-auth-library": "^11.1.0",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "http-status-codes": "^2.3.0",
@@ -57,6 +58,8 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",

@@ -1,7 +1,7 @@
 import type { User } from "../db/schema.js";
 import passport from "passport";
 import { StatusCodes } from "http-status-codes";
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { roleRights } from "../config/roles.js";
 import { ApiError } from "../utils/index.js";
 

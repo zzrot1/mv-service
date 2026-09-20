@@ -1,5 +1,5 @@
 import { SMTPClient } from "smtp-client";
-import { EmailMessage, EmailProvider } from "../../utils/index.js";
+import type { EmailMessage, EmailProvider } from "../../utils/index.js";
 
 type SmtpConfig = {
   host: string;

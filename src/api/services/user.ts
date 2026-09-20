@@ -7,13 +7,7 @@ import type {
   NormalizedSearchablePagedQuery,
   PagedResult,
 } from "../../toolkit/index.js";
-import {
-  CreateUserRequest,
-  IUserRepository,
-  SafeUser,
-  UpdateUserInput,
-  UserSortField,
-} from "../repositories/index.js";
+import type { CreateUserRequest, ITokenRepository, IUserRepository, SafeUser, UpdateUserInput, UserSortField } from "../repositories/index.js";
 import { StatusCodes } from "http-status-codes";
 import { ApiError, encryptPassword } from "../../utils/index.js";
 
@@ -30,6 +24,8 @@ export class UserService
   constructor(
     @inject(DI_TOKENS.UserRepository)
     private readonly users: IUserRepository,
+    @inject(DI_TOKENS.TokenRepository)
+    private readonly tokens: ITokenRepository,
   ) {}
 
   async create(params: CreateUserRequest): Promise<SafeUser> {
@@ -41,9 +37,11 @@ export class UserService
 
     const passwordHash = await encryptPassword(params.password);
 
+    const { password: _pw, ...profile } = params;
+
     const user = await this.users.create({
+      ...profile,
       email: params.email,
-      name: params.name ?? null,
       passwordHash,
       role,
     });
@@ -94,6 +92,9 @@ export class UserService
     const existing = await this.users.findById(id);
     if (!existing) return null;
 
+    // Token.userId are FK cu onDelete restrict, deci tokenurile emise pentru
+    // user trebuie sterse inainte, altfel stergerea esueaza.
+    await this.tokens.deleteByUserId(id);
     await this.users.deleteById(id);
   }
 
@@ -195,7 +196,7 @@ export class UserService
     }
   }
 
-  private toSafeUser(user: { password: string } & SafeUser): SafeUser {
+  private toSafeUser(user: { password: string | null } & SafeUser): SafeUser {
     const { password: _pw, ...safe } = user;
     return safe;
   }
