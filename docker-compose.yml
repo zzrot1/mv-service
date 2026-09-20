@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mv-service-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mv_service
+      POSTGRES_PASSWORD: mv_service_dev
+      POSTGRES_DB: mv_service_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - mv-service-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mv_service -d mv_service_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mv-service-pgdata:
+    name: mv-service-pgdata

@@ -1,0 +1,49 @@
+Node dependencies
+
+node_modules/
+
+Build outputs
+
+dist/
+build/
+coverage/
+
+Environment variables
+
+.env
+.env.*
+!.env.example
+
+Logs
+
+logs/
+.log
+npm-debug.log
+
+OS generated files
+
+.DS_Store
+Thumbs.db
+
+IDE/editor folders
+
+.vscode/
+.idea/
+
+TypeScript cache
+
+*.tsbuildinfo
+
+Optional npm cache directory
+
+.npm/
+
+Misc
+
+.eslintcache
+.prettiercache
+
+Ignore any local overrides
+
+local.env
+
