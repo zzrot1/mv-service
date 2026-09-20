@@ -7,12 +7,12 @@ import passport from "passport";
 import { StatusCodes } from "http-status-codes";
 
 import config from "./config/config.js";
-import morgan, { errorHandler } from "./config/morgan.js";
+import morgan from "./config/morgan.js";
 import routes from "./api/routes/v1/index.js";
 import { authLimiter } from "./middlewares/rateLimiter.js";
 import xss from "xss";
 import { jwtStrategy } from "./config/passport.js";
-import { errorConverter } from "./middlewares/error.js";
+import { errorConverter, errorHandler } from "./middlewares/error.js";
 import { ApiError } from "./utils/index.js";
 
 const app = express();

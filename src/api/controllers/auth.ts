@@ -17,6 +17,7 @@ import type { User } from "../../db/schema.js";
 import { verifyRequestOrigin } from "../../middlewares/csrf.js";
 import { validate } from "../../middlewares/validate.js";
 import config from "../../config/config.js";
+import logger from "../../config/logger.js";
 import {
   clearRefreshTokenCookie,
   setRefreshTokenCookie,
@@ -40,6 +41,19 @@ export interface AuthResponse {
 export interface RegisterBody {
   email: string;
   password: string;
+}
+
+/**
+ * Register nu mai intoarce tokens: contul trebuie verificat pe email inainte
+ * de primul login, deci nu are rost sa dam o sesiune care oricum nu poate fi
+ * reinnoita prin login.
+ */
+export interface RegisterResponse {
+  user: SafeUser;
+}
+
+export interface ResendVerificationBody {
+  email: string;
 }
 
 export interface LoginBody {
@@ -83,19 +97,39 @@ export class AuthController extends Controller {
   @Post("register")
   @SuccessResponse(StatusCodes.CREATED, "Created")
   @Middlewares(validate(authValidation.register))
-  public async register(
-    @Request() req: ExRequest,
-    @Body() body: RegisterBody,
-  ): Promise<AuthResponse> {
+  public async register(@Body() body: RegisterBody): Promise<RegisterResponse> {
     const user = await this.userService.createUser({
       email: body.email,
       password: body.password,
     });
-    const tokens = await this.tokenService.generateAuthTokens(user);
 
-    this.issueRefreshCookie(req, tokens);
+    await this.sendVerificationEmailBestEffort(user);
+
     this.setStatus(StatusCodes.CREATED);
-    return { user, tokens };
+    return { user };
+  }
+
+  /**
+   * Retrimite emailul de verificare, fara autentificare: cine nu si-a
+   * verificat adresa nu se poate loga, deci nu are cum sa obtina un token
+   * ca sa ceara retrimiterea prin ruta protejata.
+   *
+   * Raspunde mereu 204, chiar daca adresa nu exista sau e deja verificata,
+   * ca sa nu poata fi folosita ca oracol pentru descoperirea conturilor.
+   */
+  @Post("resend-verification-email")
+  @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
+  @Middlewares(validate(authValidation.resendVerificationEmail))
+  public async resendVerificationEmail(
+    @Body() body: ResendVerificationBody,
+  ): Promise<void> {
+    const user = await this.authService.findPendingVerification(body.email);
+
+    if (user) {
+      await this.sendVerificationEmailBestEffort(user);
+    }
+
+    this.setStatus(StatusCodes.NO_CONTENT);
   }
 
   @Post("login")
@@ -160,10 +194,21 @@ export class AuthController extends Controller {
   public async forgotPassword(
     @Body() body: ForgotPasswordBody,
   ): Promise<void> {
-    const token = await this.tokenService.generateResetPasswordToken(
-      body.email,
-    );
-    await this.emailService.sendResetPasswordEmail(body.email, token);
+    // Raspunde mereu 204, chiar daca adresa nu exista: altfel ruta devine un
+    // oracol prin care oricine afla ce conturi sunt inregistrate. Acelasi
+    // tratament ca la resend-verification-email.
+    try {
+      const token = await this.tokenService.generateResetPasswordToken(
+        body.email,
+      );
+      await this.emailService.sendResetPasswordEmail(body.email, token);
+    } catch (err) {
+      logger.error(
+        `Failed to send reset password email: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     this.setStatus(StatusCodes.NO_CONTENT);
   }
@@ -202,6 +247,28 @@ export class AuthController extends Controller {
   public async verifyEmail(@Request() req: ExRequest): Promise<void> {
     await this.authService.verifyEmail(req.query.token as string);
     this.setStatus(StatusCodes.NO_CONTENT);
+  }
+
+  /**
+   * Trimite emailul de verificare fara sa poata rupe inregistrarea.
+   *
+   * Un provider de email picat nu trebuie sa opreasca crearea conturilor:
+   * userul e deja creat si logat, iar daca emailul nu pleaca poate cere
+   * retrimiterea din POST /v1/auth/send-verification-email.
+   */
+  private async sendVerificationEmailBestEffort(user: SafeUser): Promise<void> {
+    if (user.isEmailVerified) return;
+
+    try {
+      const token = await this.tokenService.generateVerifyEmailToken(user);
+      await this.emailService.sendVerificationEmail(user.email, token);
+    } catch (err) {
+      logger.error(
+        `Failed to send verification email to user ${user.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**

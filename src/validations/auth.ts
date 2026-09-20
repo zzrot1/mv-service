@@ -16,6 +16,12 @@ export const authValidation = {
     }),
   },
 
+  resendVerificationEmail: {
+    body: z.object({
+      email: z.email(),
+    }),
+  },
+
   google: {
     body: z.object({
       idToken: z.string().min(1),

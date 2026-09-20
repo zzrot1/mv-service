@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 10
 
+  # Server SMTP local: prinde orice email trimis de aplicatie si il arata
+  # intr-un UI web, fara sa-l livreze cu adevarat nimanui.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mv-service-mailpit
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # UI web
+
 volumes:
   mv-service-pgdata:
     name: mv-service-pgdata

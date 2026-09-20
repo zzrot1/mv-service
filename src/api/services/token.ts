@@ -62,6 +62,30 @@ export class TokenService {
     });
   }
 
+  /**
+   * Citeste userId-ul dintr-un token semnat de noi, fara sa mai verifice
+   * DB-ul. Folosit pentru verificari idempotente, unde tokenul poate fi deja
+   * consumat, dar semnatura tot dovedeste ca a fost emis de acest server.
+   */
+  public readUserIdFromToken(
+    token: string,
+    type: TokenType,
+    options: { ignoreExpiration?: boolean } = {},
+  ): number | null {
+    try {
+      const payload = jwt.verify(token, this.jwtConfig.secret, {
+        ignoreExpiration: options.ignoreExpiration ?? false,
+      }) as jwt.JwtPayload;
+
+      if (payload.type !== type) return null;
+
+      const userId = Number(payload.sub);
+      return Number.isFinite(userId) ? userId : null;
+    } catch {
+      return null;
+    }
+  }
+
   public async verifyToken(token: string, type: TokenType): Promise<Token> {
     let payload: jwt.JwtPayload;
     try {

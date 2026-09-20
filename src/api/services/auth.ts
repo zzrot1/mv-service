@@ -4,6 +4,7 @@ import { DI_TOKENS } from "../../config/dependencyTokens.js";
 import { AuthProvider, TokenType, type User } from "../../db/schema.js";
 
 import { ApiError } from "../../utils/index.js";
+import logger from "../../config/logger.js";
 import type { OAuthProfile, OAuthProvider } from "../../utils/index.js";
 import { isPasswordMatch } from "../../utils/encryption.js";
 
@@ -40,6 +41,15 @@ export class AuthService {
     // they can only sign in through that provider until they set a password.
     if (!user?.password || !(await isPasswordMatch(password, user.password))) {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Incorrect email or password");
+    }
+
+    // Verificarea vine dupa parola intentionat: altfel raspunsul ar spune
+    // unui atacator ca adresa exista, inainte sa demonstreze ca stie parola.
+    if (!user.isEmailVerified) {
+      throw new ApiError(
+        StatusCodes.FORBIDDEN,
+        "Email not verified",
+      );
     }
 
     // transform în SafeUser
@@ -169,7 +179,13 @@ export class AuthService {
 
       // revocă toate reset tokens pentru user
       await this.tokenRepo.blacklistManyByUserAndType(tokenDoc.userId, TokenType.RESET_PASSWORD);
-    } catch {
+    } catch (err) {
+      // Resetarea ramane strict single-use: un replay ar schimba parola din nou.
+      logger.error(
+        `Password reset failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Password reset failed");
     }
   }
@@ -189,8 +205,46 @@ export class AuthService {
 
       // marchează user-ul verificat
       await this.userService.updateUser(tokenDoc.userId, { isEmailVerified: true });
-    } catch {
+    } catch (err) {
+      // Linkul se consuma o singura data, dar poate fi cerut de mai multe
+      // ori: React Strict Mode in dev, un refresh, sau scannerele de linkuri
+      // ale furnizorilor de email, care prefetch-uiesc URL-urile. Daca
+      // rezultatul e deja atins, a doua cerere nu e o eroare.
+      if (await this.isEmailAlreadyVerified(verifyEmailToken)) return;
+
+      logger.error(
+        `Email verification failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Email verification failed");
     }
+  }
+
+  /**
+   * Userul caruia i s-ar putea retrimite emailul de verificare.
+   * Returneaza null si cand adresa nu exista, si cand e deja verificata, ca
+   * apelantul sa nu poata deosebi cazurile si sa nu scurga existenta conturilor.
+   */
+  public async findPendingVerification(email: string): Promise<SafeUser | null> {
+    const user = await this.usersRepo.findByEmail(email.toLowerCase());
+
+    if (!user || user.isEmailVerified) return null;
+    return this.toSafeUser(user);
+  }
+
+  private async isEmailAlreadyVerified(token: string): Promise<boolean> {
+    // Semnatura dovedeste ca tokenul a fost emis de noi; expirarea o ignoram
+    // fiindca nu acordam nimic, doar constatam o stare deja existenta.
+    const userId = this.tokenService.readUserIdFromToken(
+      token,
+      TokenType.VERIFY_EMAIL,
+      { ignoreExpiration: true },
+    );
+
+    if (!userId) return false;
+
+    const user = await this.usersRepo.findById(userId);
+    return user?.isEmailVerified === true;
   }
 }

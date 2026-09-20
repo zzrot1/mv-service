@@ -11,7 +11,8 @@ export const errorConverter: ErrorRequestHandler = (err, req, res, next) => {
       ? StatusCodes.BAD_REQUEST
       : StatusCodes.INTERNAL_SERVER_ERROR;
     const message = error.message || StatusCodes[statusCode];
-    error = new ApiError(statusCode, message, false, err.stack);
+    // (statusCode, message, details, isOperational, stack)
+    error = new ApiError(statusCode, message, undefined, false, err.stack);
   }
   next(error);
 };
@@ -19,9 +20,13 @@ export const errorConverter: ErrorRequestHandler = (err, req, res, next) => {
 // eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
 export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   let { statusCode, message } = err;
+  let details = err.details;
+
   if (config.env === "production" && !err.isOperational) {
     statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
     message = StatusCodes[StatusCodes.INTERNAL_SERVER_ERROR];
+    // Nu scurgem detalii interne pentru erori neasteptate in productie.
+    details = undefined;
   }
 
   res.locals.errorMessage = err.message;
@@ -29,6 +34,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const response = {
     code: statusCode,
     message,
+    // Lista de campuri invalide venita din validarea zod.
+    ...(details ? { details } : {}),
     ...(config.env === "development" && { stack: err.stack }),
   };
 
