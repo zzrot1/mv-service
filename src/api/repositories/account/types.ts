@@ -22,4 +22,5 @@ export interface IAccountRepository {
   create(data: CreateAccountInput): Promise<Account>;
 
   deleteById(id: number): Promise<void>;
+  deleteByUserId(userId: number): Promise<void>;
 }

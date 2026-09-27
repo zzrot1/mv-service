@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -65,8 +66,15 @@ export const users = pgTable(
     updatedAt: timestamp("updatedAt", { precision: 3 })
       .notNull()
       .$onUpdate(() => new Date()),
+    deletedAt: timestamp("deletedAt", { precision: 3 }),
   },
-  (table) => [uniqueIndex("User_email_key").on(table.email)],
+  (table) => [
+    // Unic doar printre userii activi, ca emailul unui cont sters sa poata
+    // fi refolosit la o inregistrare noua.
+    uniqueIndex("User_email_key")
+      .on(table.email)
+      .where(sql`${table.deletedAt} IS NULL`),
+  ],
 );
 
 export const tokens = pgTable(

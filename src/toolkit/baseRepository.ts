@@ -29,11 +29,11 @@ export type DrizzleModelDelegate<
     where: TWhereUniqueInput;
     data: TUpdateInput;
   }): Promise<TEntity>;
-  delete(args: { where: TWhereUniqueInput }): Promise<TEntity>;
 };
 
 export type BaseRepositoryOptions<TEntity, TId extends EntityId = number> = {
   idField?: keyof TEntity & string;
+  softDeleteField?: keyof TEntity & string;
   defaultOrderBy?: OrderByInput;
   searchFields?: Array<keyof TEntity & string>;
   buildWhereUnique?: (id: TId) => WhereInput;
@@ -67,6 +67,7 @@ export class BaseRepository<
   TWhereUniqueInput extends WhereInput = WhereInput,
 > implements BaseCrudRepository<TEntity, TCreateInput, TUpdateInput, TId> {
   private readonly idField: string;
+  private readonly softDeleteField: string;
   private readonly defaultOrderBy?: OrderByInput;
   private readonly searchFields: string[];
   private readonly buildWhereUnique: (id: TId) => TWhereUniqueInput;
@@ -83,6 +84,7 @@ export class BaseRepository<
     options: BaseRepositoryOptions<TEntity, TId> = {},
   ) {
     this.idField = options.idField ?? "id";
+    this.softDeleteField = options.softDeleteField ?? "deletedAt";
     this.defaultOrderBy = options.defaultOrderBy;
     this.searchFields = options.searchFields ?? [];
     this.buildWhereUnique =
@@ -94,7 +96,10 @@ export class BaseRepository<
   }
 
   public getAll(): Promise<TEntity[]> {
-    return this.model.findMany({ orderBy: this.defaultOrderBy });
+    return this.model.findMany({
+      where: this.withNotDeleted({}),
+      orderBy: this.defaultOrderBy,
+    });
   }
 
   public getAllPaged(
@@ -109,12 +114,16 @@ export class BaseRepository<
     return this.findPaged(this.createSearchWhere(query.search), query);
   }
 
-  public getById(id: TId): Promise<TEntity | null> {
-    return this.model.findUnique({ where: this.buildWhereUnique(id) });
+  public async getById(id: TId): Promise<TEntity | null> {
+    const entity = await this.model.findUnique({
+      where: this.buildWhereUnique(id),
+    });
+
+    return entity && !this.isDeleted(entity) ? entity : null;
   }
 
   public find(where: WhereInput): Promise<TEntity[]> {
-    return this.model.findMany({ where: where as TWhereInput });
+    return this.model.findMany({ where: this.withNotDeleted(where) });
   }
 
   public add(data: TCreateInput): Promise<TEntity> {
@@ -141,14 +150,17 @@ export class BaseRepository<
       return null;
     }
 
-    return this.model.delete({ where: this.buildWhereUnique(id) });
+    return this.model.update({
+      where: this.buildWhereUnique(id),
+      data: { [this.softDeleteField]: new Date() } as TUpdateInput,
+    });
   }
 
   protected async findPaged(
     where: WhereInput,
     query: NormalizedPagedQuery,
   ): Promise<PagedResult<TEntity>> {
-    const normalizedWhere = where as TWhereInput;
+    const normalizedWhere = this.withNotDeleted(where);
     const orderBy = query.sortBy
       ? { [query.sortBy]: query.sortOrder ?? "desc" }
       : this.defaultOrderBy;
@@ -170,6 +182,21 @@ export class BaseRepository<
       limit: query.limit,
       totalPages: Math.ceil(total / query.limit),
     };
+  }
+
+  private withNotDeleted(where: WhereInput): TWhereInput {
+    const notDeleted = { [this.softDeleteField]: null };
+
+    return (
+      Object.keys(where).length === 0
+        ? notDeleted
+        : { AND: [where, notDeleted] }
+    ) as TWhereInput;
+  }
+
+  private isDeleted(entity: TEntity): boolean {
+    const value = (entity as Record<string, unknown>)[this.softDeleteField];
+    return value !== null && value !== undefined;
   }
 
   private createSearchWhere(search?: string): WhereInput {

@@ -1,9 +1,8 @@
 import type { Role, User } from "../../../db/schema.js";
 import type { SortOrder } from "../../../utils/index.js";
 
-export type SafeUser = Omit<User, "password">;
+export type SafeUser = Omit<User, "password" | "deletedAt">;
 
-/** Campuri de profil pe care userul si le poate edita singur. */
 export type ProfileFields = {
   name?: string | null;
   phone?: string | null;
@@ -17,7 +16,6 @@ export type ProfileFields = {
 
 export type CreateUserInput = ProfileFields & {
   email: string;
-  /** Absent for users created through an OAuth provider. */
   passwordHash?: string | null;
   role?: Role;
   isEmailVerified?: boolean;
@@ -29,7 +27,6 @@ export type UpdateUserInput = ProfileFields & {
   isEmailVerified?: boolean;
 };
 
-/** Ce accepta PATCH /v1/profile — fara email, rol sau flag de verificare. */
 export type UpdateProfileInput = ProfileFields;
 
 export type CreateUserRequest = ProfileFields & {
@@ -58,7 +55,7 @@ export interface IUserRepository {
   updateById(id: number, data: UpdateUserInput): Promise<User>;
   updatePasswordById(id: number, passwordHash: string): Promise<User>;
 
-  deleteById(id: number): Promise<void>;
+  softDeleteById(id: number): Promise<void>;
   count(filter?: Partial<Pick<User, "role" | "isEmailVerified">>): Promise<number>;
 
   query(

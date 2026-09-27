@@ -1,13 +1,13 @@
 import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../config/dependencyTokens.js";
-import type { Role } from "../../db/schema.js";
+import type { Role, User } from "../../db/schema.js";
 import type { BaseCrudService } from "../../toolkit/index.js";
 import type {
   NormalizedPagedQuery,
   NormalizedSearchablePagedQuery,
   PagedResult,
 } from "../../toolkit/index.js";
-import type { CreateUserRequest, ITokenRepository, IUserRepository, SafeUser, UpdateUserInput, UserSortField } from "../repositories/index.js";
+import type { CreateUserRequest, IAccountRepository, ITokenRepository, IUserRepository, SafeUser, UpdateUserInput, UserSortField } from "../repositories/index.js";
 import { StatusCodes } from "http-status-codes";
 import { ApiError, encryptPassword } from "../../utils/index.js";
 
@@ -26,6 +26,8 @@ export class UserService
     private readonly users: IUserRepository,
     @inject(DI_TOKENS.TokenRepository)
     private readonly tokens: ITokenRepository,
+    @inject(DI_TOKENS.AccountRepository)
+    private readonly accounts: IAccountRepository,
   ) {}
 
   async create(params: CreateUserRequest): Promise<SafeUser> {
@@ -91,11 +93,9 @@ export class UserService
   async delete(id: number): Promise<void | null> {
     const existing = await this.users.findById(id);
     if (!existing) return null;
-
-    // Token.userId are FK cu onDelete restrict, deci tokenurile emise pentru
-    // user trebuie sterse inainte, altfel stergerea esueaza.
     await this.tokens.deleteByUserId(id);
-    await this.users.deleteById(id);
+    await this.accounts.deleteByUserId(id);
+    await this.users.softDeleteById(id);
   }
 
   async createUser(params: CreateUserRequest): Promise<SafeUser> {
@@ -196,8 +196,8 @@ export class UserService
     }
   }
 
-  private toSafeUser(user: { password: string | null } & SafeUser): SafeUser {
-    const { password: _pw, ...safe } = user;
+  private toSafeUser(user: User): SafeUser {
+    const { password: _pw, deletedAt: _deletedAt, ...safe } = user;
     return safe;
   }
 }

@@ -52,11 +52,7 @@ export class AuthService {
       );
     }
 
-    // transform în SafeUser
-    // (SafeUser-ul tău pare să fie User fără password)
-    // Dacă SafeUser mai exclude câmpuri, ajustezi aici.
-    const { password: _pw, ...safe } = user;
-    return safe as SafeUser;
+    return this.toSafeUser(user);
   }
 
   /**
@@ -135,7 +131,7 @@ export class AuthService {
   }
 
   private toSafeUser(user: User): SafeUser {
-    const { password: _pw, ...safe } = user;
+    const { password: _pw, deletedAt: _deletedAt, ...safe } = user;
     return safe;
   }
 

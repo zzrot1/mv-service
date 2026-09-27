@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { inject, injectable } from "tsyringe";
 import { DI_TOKENS } from "../../../config/dependencyTokens.js";
@@ -23,6 +23,8 @@ const safeUserColumns = {
   updatedAt: users.updatedAt,
 } as const;
 
+const notDeleted = isNull(users.deletedAt);
+
 @injectable()
 export class DrizzleUserRepository implements IUserRepository {
   constructor(
@@ -34,7 +36,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), notDeleted))
       .limit(1);
 
     return user ?? null;
@@ -44,7 +46,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(and(eq(users.email, email), notDeleted))
       .limit(1);
 
     return user ?? null;
@@ -77,7 +79,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const [user] = await this.db
       .update(users)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), notDeleted))
       .returning();
 
     return user;
@@ -87,25 +89,28 @@ export class DrizzleUserRepository implements IUserRepository {
     const [user] = await this.db
       .update(users)
       .set({ password: passwordHash, updatedAt: new Date() })
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), notDeleted))
       .returning();
 
     return user;
   }
 
-  async deleteById(id: number): Promise<void> {
-    await this.db.delete(users).where(eq(users.id, id));
+  async softDeleteById(id: number): Promise<void> {
+    const now = new Date();
+    await this.db
+      .update(users)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(users.id, id), notDeleted));
   }
 
   async count(
     filter: Partial<Pick<User, "role" | "isEmailVerified">> = {},
   ): Promise<number> {
     const conditions = this.buildFilterConditions(filter);
-    const query = this.db.select({ total: count() }).from(users).$dynamic();
-
-    if (conditions.length > 0) {
-      query.where(and(...conditions));
-    }
+    const query = this.db
+      .select({ total: count() })
+      .from(users)
+      .where(and(...conditions));
 
     const [result] = await query;
     return result?.total ?? 0;
@@ -131,14 +136,10 @@ export class DrizzleUserRepository implements IUserRepository {
     const query = this.db
       .select(safeUserColumns)
       .from(users)
-      .$dynamic()
+      .where(and(...conditions))
       .limit(limit)
       .offset(skip)
       .orderBy(orderBy);
-
-    if (conditions.length > 0) {
-      query.where(and(...conditions));
-    }
 
     return query;
   }
@@ -146,7 +147,7 @@ export class DrizzleUserRepository implements IUserRepository {
   private buildFilterConditions(
     filter: Partial<Pick<User, "role" | "isEmailVerified">>,
   ): SQL[] {
-    const conditions: SQL[] = [];
+    const conditions: SQL[] = [notDeleted];
 
     if (filter.role) conditions.push(eq(users.role, filter.role));
     if (filter.isEmailVerified !== undefined) {

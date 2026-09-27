@@ -65,4 +65,8 @@ export class DrizzleAccountRepository implements IAccountRepository {
   async deleteById(id: number): Promise<void> {
     await this.db.delete(accounts).where(eq(accounts.id, id));
   }
+
+  async deleteByUserId(userId: number): Promise<void> {
+    await this.db.delete(accounts).where(eq(accounts.userId, userId));
+  }
 }

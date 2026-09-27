@@ -5,7 +5,7 @@ import {
 } from "passport-jwt";
 import config from "./config.js";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "./dbConnection.js";
 import { TokenType, users } from "../db/schema.js";
 
@@ -32,7 +32,7 @@ const jwtVerify: VerifyCallback = async (payload: unknown, done) => {
         role: users.role,
       })
       .from(users)
-      .where(eq(users.id, p.sub))
+      .where(and(eq(users.id, p.sub), isNull(users.deletedAt)))
       .limit(1);
 
     if (!user) return done(null, false);
