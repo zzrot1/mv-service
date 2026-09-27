@@ -5,6 +5,7 @@ import {
   Controller,
   Middlewares,
   Post,
+  Query,
   Request,
   Route,
   Security,
@@ -217,13 +218,10 @@ export class AuthController extends Controller {
   @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
   @Middlewares(validate(authValidation.resetPassword))
   public async resetPassword(
-    @Request() req: ExRequest,
+    @Query() token: string,
     @Body() body: ResetPasswordBody,
   ): Promise<void> {
-    await this.authService.resetPassword(
-      req.query.token as string,
-      body.password,
-    );
+    await this.authService.resetPassword(token, body.password);
     this.setStatus(StatusCodes.NO_CONTENT);
   }
 
@@ -244,8 +242,8 @@ export class AuthController extends Controller {
   @Post("verify-email")
   @SuccessResponse(StatusCodes.NO_CONTENT, "No Content")
   @Middlewares(validate(authValidation.verifyEmail))
-  public async verifyEmail(@Request() req: ExRequest): Promise<void> {
-    await this.authService.verifyEmail(req.query.token as string);
+  public async verifyEmail(@Query() token: string): Promise<void> {
+    await this.authService.verifyEmail(token);
     this.setStatus(StatusCodes.NO_CONTENT);
   }
 
